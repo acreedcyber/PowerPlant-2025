@@ -1,0 +1,55 @@
+version: '3.9'
+
+networks:
+  scada_net:
+    driver: bridge
+  ics_net:
+    driver: bridge
+  security_net:
+    driver: bridge
+
+services:
+  scada:
+    image: fuxa/fuxa:latest
+    container_name: scada
+    networks:
+      - scada_net
+    ports:
+      - "1881:1881"  # SCADA Web UI
+    restart: unless-stopped
+
+  plc:
+    image: openplc/openplc_v3:latest
+    container_name: plc
+    networks:
+      - scada_net
+      - ics_net
+    ports:
+      - "502:502"  # Modbus/TCP
+    volumes:
+      - ./plc_programs:/workdir/webserver/st_files  # Mount PLC programs
+    restart: unless-stopped
+
+  ids:
+    image: suricata/suricata:latest
+    container_name: ids
+    networks:
+      - security_net
+      - scada_net  # To monitor SCADA traffic
+      - ics_net  # To inspect PLC traffic
+    cap_add:
+      - NET_ADMIN  # Required for packet inspection
+    restart: unless-stopped
+
+  historian:
+    image: timescale/timescaledb:latest
+    container_name: historian-db
+    networks:
+      - scada_net
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: historian
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
